@@ -43,6 +43,21 @@ jobs:
           mkdir -p artifacts
           echo "TODO: build into artifacts/" > artifacts/PLACEHOLDER
 
+      # OPTIONAL: prove what actually came out of this build, not just what went
+      # in. Pinning/hashing inputs (see STANDARD.md -> "Supply chain") says
+      # nothing about the output artifact itself. Uncomment and pin if you
+      # publish binaries/packages that consumers install directly.
+      # - name: Generate SBOM
+      #   uses: anchore/sbom-action@<SHA>  # vX.Y.Z
+      #   with:
+      #     path: artifacts/
+      #     format: cyclonedx-json
+      #     output-file: artifacts/sbom.cdx.json
+      # - name: Sign artifacts (keyless)
+      #   uses: sigstore/cosign-installer@<SHA>  # vX.Y.Z
+      # - run: |
+      #     for f in artifacts/*; do cosign sign-blob --yes --bundle "$f.cosign.bundle" "$f"; done
+
       - name: Upload artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
@@ -80,3 +95,10 @@ jobs:
           gh api -X PATCH \
             "repos/${GITHUB_REPOSITORY}/releases/${{ steps.draft_release.outputs.id }}" \
             -F draft=false --jq .html_url
+
+      # OPTIONAL: pairs with the SBOM/signing steps in the `build` job above —
+      # attests that THIS repo's CI produced these artifacts.
+      # - name: Attest build provenance
+      #   uses: actions/attest-build-provenance@<SHA>  # vX.Y.Z
+      #   with:
+      #     subject-path: artifacts/*
