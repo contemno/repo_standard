@@ -1,0 +1,90 @@
+name: Security
+
+# Scheduled security scanning, separate from Dependabot: Dependabot only proposes
+# an update when a NEW upstream release exists. It says nothing about an advisory
+# disclosed against a version you've already shipped (no fix released yet), and
+# nothing about leaked secrets or code-level findings. This workflow covers that
+# gap with four scans:
+#   * an ecosystem advisory scan of the CURRENTLY COMMITTED lockfile (TODO below)
+#   * gitleaks     — secret scanning
+#   * CodeQL       — SAST
+#   * Trivy        — filesystem vulnerability scan, uploaded as SARIF
+#
+# Intentionally NOT a required check: daily advisory-DB churn shouldn't block a
+# PR unrelated to the flagged dependency. A finding turns the job red for
+# visibility (and, for Trivy/CodeQL, shows up in the Security tab) without
+# wedging merges. See STANDARD.md -> "Supply chain".
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # weekly, Monday 06:00 UTC
+  pull_request:
+    # TODO: narrow to your manifest/lockfile paths (e.g. Cargo.lock,
+    # requirements*.txt, package-lock.json) so this only reruns on PRs that can
+    # change what's installed.
+    paths:
+      - '**/Cargo.lock'
+      - '**/requirements*.txt'
+      - '**/package-lock.json'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  advisory-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      # TODO: keep the block(s) matching your ecosystem(s), delete the rest.
+      #   Rust:   cargo install cargo-audit --locked && cargo audit
+      #   Python: pip install pip-audit && pip-audit -r requirements.txt
+      #   Node:   npm audit --audit-level=high
+      - run: echo "TODO - run your ecosystem's advisory scan against the committed lockfile"
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0  # gitleaks needs history, not just the working tree
+
+      # TODO: pin to a commit SHA (see ADOPTING.md step 1 for the grep that finds
+      # placeholders like this one).
+      - uses: gitleaks/gitleaks-action@<SHA>  # vX.Y.Z
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  codeql:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write  # required to upload SARIF to the Security tab
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      # TODO: pin both actions to commit SHAs; set `languages:` for your stack.
+      - uses: github/codeql-action/init@<SHA>  # vX.Y.Z
+        with:
+          languages: TODO  # e.g. rust, python, javascript-typescript
+          queries: security-and-quality
+      - uses: github/codeql-action/analyze@<SHA>  # vX.Y.Z
+
+  trivy-fs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      # TODO: pin to a commit SHA.
+      - uses: aquasecurity/trivy-action@<SHA>  # vX.Y.Z
+        with:
+          scan-type: fs
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+      - uses: github/codeql-action/upload-sarif@<SHA>  # vX.Y.Z, same pin as codeql job
+        with:
+          sarif_file: trivy-results.sarif

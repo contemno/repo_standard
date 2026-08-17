@@ -59,6 +59,17 @@ Both the manual path (`release.yml`, on a pushed tag) and the automated path
 artifact, so the "manual release" and "auto release" can never produce different
 outputs.
 
+### One list of checked files, not several
+
+The same principle applies below the workflow level: a list of files/targets that
+CI checks (a lint file set, a build-target list) should live in exactly one place
+— a Makefile/script target — that every workflow entry point (PR CI, the release
+workflow, a pre-push hook) invokes identically, rather than being hand-duplicated
+inline in each YAML file. A hand-copied list silently stops covering new files as
+the project grows, and nothing fails loudly to reveal the gap — it only surfaces
+later as an unchecked file shipping a bug. Route the list through `make lint` (or
+equivalent) and have every entry point call that target.
+
 ### Caching that actually helps
 
 - **`shared-key`** across parallel jobs so they restore *one* warm cache instead of
@@ -83,6 +94,15 @@ outputs.
 write`) only on the specific job that tags or publishes. Never grant write at the
 workflow level "just in case".
 
+### Surface failures on the PR, not just in the Actions log
+
+For a long-running or matrixed required job (integration tests, smoke tests), add
+an optional `if: failure() && github.event_name == 'pull_request'` step that
+posts the captured output as a PR comment (a collapsible `<details>` block,
+linking back to the run). It saves the reviewer a context-switch into the Actions
+UI to diagnose a red required check. `ci.yml`'s `service-integration` job has a
+commented template for this.
+
 ---
 
 ## Releases
@@ -99,6 +119,22 @@ workflow level "just in case".
 This decouples "ship a fix" from "decide the version number" — the second is a
 deliberate, reviewable one-line diff, the first is free.
 
+### Sortable identifiers: UTC, always
+
+Any generated timestamp that feeds a sortable identifier — a release tag, a
+snapshot/build name, a filename — must be generated in UTC (`date -u`), never
+local time. Local time reorders across DST transitions or whenever the build
+host's timezone differs from the last one, so two artifacts built hours apart can
+sort with the newer one appearing "older." `autotag.yml`'s dev-prerelease tag
+(below) is the reference implementation.
+
+A UTC date *alone* is not enough for anything that can be generated more than
+once a day: two dev-branch merges on the same UTC date share a date segment and
+then tie-break on whatever comes next (a git SHA), which sorts arbitrarily, not
+chronologically. Include time-of-day (`%Y%m%d%H%M%S`) whenever the identifier can
+recur within a day — this is why `autotag.yml`'s dev tag is
+`vX.Y.Z-dev.<UTC-timestamp>.<short-sha>` rather than `<UTC-date>.<short-sha>`.
+
 ### Two GitHub platform gotchas (documented because they cost real time)
 
 1. **A tag pushed with the default `GITHUB_TOKEN` does not trigger
@@ -109,6 +145,26 @@ deliberate, reviewable one-line diff, the first is free.
 2. **Immutable releases only accept assets while a draft.** Create the release as a
    *draft* with the assets attached, then flip `draft=false` in a second step.
    Attaching after publish fails.
+
+### PR test builds (optional pattern, not templated here)
+
+Some projects want an installable build of a PR's HEAD for manual testing before
+it merges — typically a maintainer-applied label triggering `pull_request_target`
+so the build runs with a token that can upload artifacts, against a fork PR's
+(attacker-controlled) code. This isn't common enough to earn a checked-in
+template, but if you build one, three failure modes are load-bearing:
+
+- **Authorize by permission, not by label access.** Gate on the *labeler's*
+  repository permission (`write`/`maintain`/`admin` via the collaborator API)
+  before running anything with fork PR content and a privileged token —
+  triage-level ability to apply a label is not enough trust to build untrusted
+  code with secrets in scope.
+- **Timestamp before any PR/build-number segment in preview tags**, so dpkg/apt
+  (or your ecosystem's version comparator) always upgrades to the newer build
+  regardless of which PR number produced it.
+- **Exclude non-release preview tags from any changelog/version derivation that
+  assumes tag ancestry** — an unmerged, ancestor-less preview tag can otherwise
+  abort release tooling that walks tag history under `set -e`.
 
 ### Trigger hygiene
 
@@ -130,6 +186,32 @@ bundled with real code still releases.)
 - **Dependabot bumps both**, grouped (one PR per ecosystem, not per package) and
   targeting the integration branch (`dev`) so bumps flow through the normal gate.
   Dependabot understands the SHA-`# comment` convention and rewrites both together.
+- **Cooldown gates version updates, not security fixes.** A `cooldown:` block
+  (`default-days`, tightened per-severity `semver-major/minor/patch-days` for
+  security-sensitive ecosystems) makes a freshly published — possibly
+  compromised — release age before Dependabot proposes adopting it. Dependabot
+  security-advisory PRs bypass the cooldown automatically, so this only slows
+  routine version churn, never a fix for a known vulnerability.
+- **A scheduled advisory/secret/SAST scan complements Dependabot.** Dependabot
+  only proposes an update when a *new* upstream release fixes a problem; it says
+  nothing about an advisory disclosed against a version you've already shipped
+  with no fix released yet, and nothing about leaked secrets or code-level
+  findings. `.github/workflows/security.yml` covers that gap: an ecosystem
+  advisory scan (`cargo audit`, `pip-audit`, `npm audit`, … — TODO per stack),
+  plus the language-agnostic trio `gitleaks` (secret scanning), CodeQL (SAST),
+  and a Trivy filesystem scan uploading SARIF to code scanning. It runs weekly
+  and on manifest-touching PRs, and is **intentionally not a required check** —
+  daily advisory-DB churn shouldn't block a PR unrelated to the flagged
+  dependency; a finding turns the job red for visibility without wedging merges.
+- **Release artifact provenance, once you publish binaries.** Pinning/hashing
+  *inputs* only proves what you built from; it says nothing about what actually
+  came out or who built it. For projects that publish binaries/packages,
+  `build-release.yml`'s `release` job has optional (TODO-gated) steps to
+  keylessly sign each artifact (`cosign sign-blob --bundle`), generate an SBOM
+  (CycloneDX/SPDX), and attach a build-provenance attestation
+  (`actions/attest-build-provenance`) — so a consumer can verify both the
+  artifact's contents and that it came from this repo's CI, not just that its
+  declared dependencies were pinned.
 
 ---
 
@@ -185,3 +267,11 @@ safe path the easy path.
   notes N/A — enforced by a line in the PR template.
 - **Fast local pre-push hook.** Lint + syntax only (~seconds); full tests run in
   CI. Fast enough that nobody disables it.
+- **`dev → main` promotion PRs merge with "Create a merge commit" — never rebase
+  or squash.** Rebase/squash rewrites the promoted commits on `main`, so `main`
+  stops being a descendant of `dev`, and the *next* promotion PR then conflicts
+  on every file both sides touched. A merge commit keeps `main` a descendant of
+  `dev`, so promotions stay conflict-free. (If it already happened: reconcile
+  with a sync-back PR into `dev` that merges `main` with `-s ours` — only after
+  verifying `main` has no unique content — merged the same way, as a merge
+  commit.)

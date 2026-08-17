@@ -12,6 +12,11 @@ Promotion flow: **`feature branch → dev → main`**.
   release promotion step.
 - Releases are auto-tagged. The version is `max(patch-bump, ./VERSION)`. Patch
   releases are automatic — to cut a **minor/major**, bump `VERSION` in the `dev` PR.
+- **`dev → main` promotion PRs merge with "Create a merge commit" — never rebase
+  or squash.** Doing either rewrites the promoted commits so `main` stops being a
+  descendant of `dev`, and the next promotion then conflicts on every file both
+  sides touched. See `STANDARD.md` → *Process* for the recovery recipe if this
+  already happened.
 
 ## Work loop
 

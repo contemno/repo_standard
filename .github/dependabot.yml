@@ -13,6 +13,12 @@ updates:
     groups:
       actions:
         patterns: ["*"]   # one grouped PR, not one per action
+    # Let a freshly published (possibly compromised) action release age before
+    # Dependabot proposes adopting it. This only delays routine version bumps —
+    # Dependabot security-advisory PRs bypass cooldown automatically. See
+    # STANDARD.md -> "Supply chain".
+    cooldown:
+      default-days: 14
 
   # TODO: add ONE block per package manager you actually use, and delete the rest.
   # Group each ecosystem so you review a single PR instead of N. Examples:
@@ -26,6 +32,13 @@ updates:
   #   groups:
   #     pip:
   #       patterns: ["*"]
+  #   # Security-sensitive ecosystem: keep patch/minor cooldown short so fixes
+  #   # still land quickly, but give majors longer to prove out.
+  #   cooldown:
+  #     default-days: 14
+  #     semver-major-days: 21
+  #     semver-minor-days: 7
+  #     semver-patch-days: 3
 
   # Rust (Cargo.lock committed):
   # - package-ecosystem: cargo
@@ -36,6 +49,11 @@ updates:
   #   groups:
   #     cargo:
   #       patterns: ["*"]
+  #   cooldown:
+  #     default-days: 14
+  #     semver-major-days: 21
+  #     semver-minor-days: 7
+  #     semver-patch-days: 3
 
   # Node:
   # - package-ecosystem: npm
@@ -46,3 +64,5 @@ updates:
   #   groups:
   #     npm:
   #       patterns: ["*"]
+  #   cooldown:
+  #     default-days: 14

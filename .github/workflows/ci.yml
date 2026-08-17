@@ -96,7 +96,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-      - run: echo "TODO - slower integration tests"
+      - name: Run integration tests
+        id: integration
+        run: |
+          echo "TODO - slower integration tests" | tee integration.log
+      # OPTIONAL: surface a failure on the PR instead of leaving reviewers to dig
+      # through the Actions log. See STANDARD.md -> "Surface failures on the PR".
+      # - name: Post failure output to PR
+      #   if: failure() && github.event_name == 'pull_request'
+      #   env:
+      #     GH_TOKEN: ${{ github.token }}
+      #   run: |
+      #     {
+      #       echo "<details><summary>service-integration failed — output</summary>"
+      #       echo '```'
+      #       tail -n 200 integration.log
+      #       echo '```'
+      #       echo "[Full run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+      #       echo "</details>"
+      #     } > comment.md
+      #     gh pr comment "${{ github.event.pull_request.number }}" --body-file comment.md
 
   # Aggregator: the single required `service` check. `if: always()` makes it run
   # even when an upstream job fails, so it FAILS the check — a plain `needs` job

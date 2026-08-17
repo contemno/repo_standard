@@ -1,8 +1,14 @@
 name: Auto-tag
 
 # Automatically tag (and release) on every push/merge to a tracked branch:
-#   * dev  -> prerelease tag  vX.Y.Z-dev.<UTC-date>.<short-sha>, GitHub prerelease
+#   * dev  -> prerelease tag  vX.Y.Z-dev.<UTC-timestamp>.<short-sha>, GitHub prerelease
 #   * main -> release tag     vX.Y.Z (next version per scripts/next-version.sh)
+#
+# The dev tag's timestamp is date+time (%Y%m%d%H%M%S), not date-only: two merges
+# to dev on the same day would otherwise share a date segment and tie-break on
+# the trailing SHA, which sorts arbitrarily rather than chronologically. See
+# STANDARD.md -> "Two GitHub platform gotchas" and "Sortable identifiers: UTC,
+# always" for why this must also be UTC, not local time.
 #
 # The next version is max(patch-bump of the latest vX.Y.Z release tag, ./VERSION
 # floor), so bumping ./VERSION cuts exactly one minor/major and patch releases
@@ -58,7 +64,7 @@ jobs:
             tag="v${next}"
             prerelease=false
           else
-            tag="v${next}-dev.$(date -u +%Y%m%d).$(git rev-parse --short HEAD)"
+            tag="v${next}-dev.$(date -u +%Y%m%d%H%M%S).$(git rev-parse --short HEAD)"
             prerelease=true
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"

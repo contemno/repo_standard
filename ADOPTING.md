@@ -14,6 +14,8 @@ they aren't part of a project) into the new repo. Keep `.github/`, `scripts/`,
 
 - Create the long-lived `dev` branch; make `main` release-only.
 - Default branch → `dev` (so PRs open against it by default).
+- [ ] Set the repo's PR merge setting so `dev → main` promotion PRs use "Create a
+      merge commit" (never squash/rebase) — see `STANDARD.md` → *Process*.
 
 ## 3. Branch protection / required checks
 
@@ -31,6 +33,12 @@ name is what you protect — never the individual fanned-out jobs.
 - [ ] For any area split into parallel jobs, add an `if: always()` aggregator
       (template included, commented).
 - [ ] Pin every `uses:` to a commit SHA with a `# vX.Y.Z` comment.
+- [ ] Route any checked-file list (lint targets, build targets) through one
+      Makefile/script target that every workflow entry point calls identically —
+      don't hand-duplicate the list inline in more than one YAML file.
+- [ ] `security.yml`: fill in the ecosystem-specific advisory scan (`cargo audit`,
+      `pip-audit`, `npm audit`, …); keep `gitleaks`/CodeQL/Trivy as-is. Leave it
+      non-required.
 
 ## 5. Fill in the release pipeline
 
@@ -40,12 +48,17 @@ name is what you protect — never the individual fanned-out jobs.
 - [ ] Set `VERSION` to your starting floor (e.g. `0.1.0`).
 - [ ] Confirm `paths-ignore` carve-outs match your repo (don't ignore the files
       that change the shipped artifact).
+- [ ] If you publish binaries/packages, consider enabling `build-release.yml`'s
+      optional (TODO-gated) cosign sign / SBOM / provenance-attestation steps —
+      see `STANDARD.md` → *Supply chain*.
 
 ## 6. Dependabot (`.github/dependabot.yml`)
 
 - [ ] Keep the `github-actions` ecosystem (works for any repo with workflows).
 - [ ] Add an ecosystem block per package manager you actually use; drop the rest.
 - [ ] Point `target-branch` at `dev`.
+- [ ] Keep (or tighten) the `cooldown:` block on each ecosystem — it only delays
+      routine version bumps; Dependabot security-advisory PRs bypass it.
 
 ## 7. Templates
 
