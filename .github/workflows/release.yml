@@ -13,6 +13,10 @@ permissions:
 
 jobs:
   release:
+    # Grants the UNION of permissions build-release.yml's jobs might need, not
+    # just what runs on THIS call path — GitHub checks a called workflow's job
+    # permissions statically against every caller. See STANDARD.md ->
+    # "Envelope permissions on reusable-workflow callers".
     permissions:
       contents: write
     uses: ./.github/workflows/build-release.yml

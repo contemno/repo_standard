@@ -20,7 +20,10 @@ on:
   pull_request:
     # TODO: narrow to your manifest/lockfile paths (e.g. Cargo.lock,
     # requirements*.txt, package-lock.json) so this only reruns on PRs that can
-    # change what's installed.
+    # change what's installed. No lockfile at all (e.g. a Debian package
+    # resolving deps via apt/debian/control at build time)? Delete the
+    # advisory-scan job below instead of leaving it a no-op, and point these
+    # paths at whatever does define your shipped dependencies instead.
     paths:
       - '**/Cargo.lock'
       - '**/requirements*.txt'
@@ -49,9 +52,7 @@ jobs:
         with:
           fetch-depth: 0  # gitleaks needs history, not just the working tree
 
-      # TODO: pin to a commit SHA (see ADOPTING.md step 1 for the grep that finds
-      # placeholders like this one).
-      - uses: gitleaks/gitleaks-action@<SHA>  # vX.Y.Z
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e  # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -63,12 +64,16 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
-      # TODO: pin both actions to commit SHAs; set `languages:` for your stack.
-      - uses: github/codeql-action/init@<SHA>  # vX.Y.Z
+      # TODO: set `languages:` for your stack (e.g. rust, python,
+      # javascript-typescript). No CodeQL-supported language in this repo (e.g.
+      # pure shell/bash tooling)? Use `actions` instead of dropping this job —
+      # it still scans the workflow YAML for injection/permission issues, which
+      # is real SAST coverage even when nothing else here is analyzable.
+      - uses: github/codeql-action/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
         with:
-          languages: TODO  # e.g. rust, python, javascript-typescript
+          languages: TODO  # e.g. rust, python, javascript-typescript, or actions
           queries: security-and-quality
-      - uses: github/codeql-action/analyze@<SHA>  # vX.Y.Z
+      - uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
 
   trivy-fs:
     runs-on: ubuntu-latest
@@ -78,13 +83,12 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
-      # TODO: pin to a commit SHA.
-      - uses: aquasecurity/trivy-action@<SHA>  # vX.Y.Z
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
           scan-type: fs
           format: sarif
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
-      - uses: github/codeql-action/upload-sarif@<SHA>  # vX.Y.Z, same pin as codeql job
+      - uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8, same pin as codeql job
         with:
           sarif_file: trivy-results.sarif

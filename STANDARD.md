@@ -59,6 +59,27 @@ Both the manual path (`release.yml`, on a pushed tag) and the automated path
 artifact, so the "manual release" and "auto release" can never produce different
 outputs.
 
+### Envelope permissions on reusable-workflow callers
+
+GitHub validates a called workflow's job-level `permissions:` **statically**
+against every caller — including a job the caller will skip via `if:` on that
+particular run. It is not enough for a caller to grant only the permissions the
+jobs it actually executes will need; it must grant the **union** of permissions
+requested by any job the called workflow defines, reachable or not on that call
+path. Miss one and the run fails validation before anything executes, even
+though the under-permissioned job never runs.
+
+Concretely: if `build-release.yml`'s `release` job gains a new permission (e.g.
+`id-token: write` + `attestations: write` for the optional provenance-attestation
+step under "Supply chain" below), every caller — `release.yml`, `autotag.yml`,
+and any PR-test-build workflow, including a `publish: false` call path that
+skips the step entirely — must add that permission to its own `permissions:`
+block too. This is non-obvious because it reads as behavioral (only what
+actually runs should need authorizing) when it's actually structural (GitHub
+checks the whole graph). Comment the requirement at each caller's `permissions:`
+block so the next person extending the reusable workflow doesn't rediscover it
+via a failed run.
+
 ### One list of checked files, not several
 
 The same principle applies below the workflow level: a list of files/targets that
@@ -203,6 +224,17 @@ bundled with real code still releases.)
   and on manifest-touching PRs, and is **intentionally not a required check** —
   daily advisory-DB churn shouldn't block a PR unrelated to the flagged
   dependency; a finding turns the job red for visibility without wedging merges.
+  - **No CodeQL-supported language?** Set `languages: actions` instead of
+    dropping CodeQL or leaving the placeholder unresolved. It's a real,
+    documented CodeQL target that scans the workflow YAML itself for injection
+    and permission issues — the only analyzable content in a repo that's mostly
+    shell, YAML, or another unsupported language (shell scripts stay covered by
+    lint, e.g. `shellcheck`, in CI).
+  - **No committed lockfile to audit?** Some ecosystems (a Debian package
+    resolving deps via `apt`/`debian/control` at build time, for one) have
+    nothing for `advisory-scan` to run against. Delete that job entirely rather
+    than leaving a permanent no-op stub, and narrow `pull_request.paths` to drop
+    the lockfile globs it no longer triggers on.
 - **Release artifact provenance, once you publish binaries.** Pinning/hashing
   *inputs* only proves what you built from; it says nothing about what actually
   came out or who built it. For projects that publish binaries/packages,

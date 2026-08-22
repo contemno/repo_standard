@@ -37,8 +37,15 @@ name is what you protect — never the individual fanned-out jobs.
       Makefile/script target that every workflow entry point calls identically —
       don't hand-duplicate the list inline in more than one YAML file.
 - [ ] `security.yml`: fill in the ecosystem-specific advisory scan (`cargo audit`,
-      `pip-audit`, `npm audit`, …); keep `gitleaks`/CodeQL/Trivy as-is. Leave it
-      non-required.
+      `pip-audit`, `npm audit`, …) against your committed lockfile. No lockfile
+      to audit (e.g. a Debian package resolving deps via `apt`/`debian/control`
+      at build time)? Delete the `advisory-scan` job entirely rather than
+      leaving a no-op stub, and narrow `pull_request.paths` accordingly.
+- [ ] `gitleaks`/CodeQL/Trivy ship already pinned to real, currently-valid SHAs
+      — genuinely "as-is," no SHA to resolve. Set CodeQL's `languages:` to your
+      stack, or to `actions` if nothing here is CodeQL-supported (e.g. a
+      pure shell/bash repo) — that still scans the workflow YAML itself.
+      Leave the whole workflow non-required.
 
 ## 5. Fill in the release pipeline
 
