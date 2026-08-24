@@ -67,6 +67,13 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+    # ENVELOPE PERMISSIONS: GitHub validates this job's permissions statically
+    # against every caller, even a caller whose call path skips this job via
+    # `if:`. If you add a permission here (e.g. uncommenting the provenance
+    # attestation step below needs id-token: write + attestations: write), add
+    # it to EVERY caller's permissions block too — release.yml, autotag.yml,
+    # and any PR-test-build workflow — not just the ones that actually run it.
+    # See STANDARD.md -> "Envelope permissions on reusable-workflow callers".
     permissions:
       contents: write   # least privilege: only this job publishes
     steps:
@@ -97,7 +104,10 @@ jobs:
             -F draft=false --jq .html_url
 
       # OPTIONAL: pairs with the SBOM/signing steps in the `build` job above —
-      # attests that THIS repo's CI produced these artifacts.
+      # attests that THIS repo's CI produced these artifacts. Needs
+      # id-token: write + attestations: write added to this job's permissions
+      # AND to every caller's permissions block — see the ENVELOPE PERMISSIONS
+      # note above.
       # - name: Attest build provenance
       #   uses: actions/attest-build-provenance@<SHA>  # vX.Y.Z
       #   with:
