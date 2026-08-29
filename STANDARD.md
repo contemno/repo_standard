@@ -59,6 +59,13 @@ Both the manual path (`release.yml`, on a pushed tag) and the automated path
 artifact, so the "manual release" and "auto release" can never produce different
 outputs.
 
+Its `build` job should also re-run lint/test — via the same composite action
+`ci.yml` uses (see *Composite actions for setup shared with the release
+workflow*, below) — on the ref it's about to package, not go straight from
+checkout to build. Otherwise a call path that never runs PR CI (a
+label-triggered PR-test-build, or a manually re-tagged old ref) can produce
+an installable artifact from code that would fail CI.
+
 ### Envelope permissions on reusable-workflow callers
 
 GitHub validates a called workflow's job-level `permissions:` **statically**
@@ -90,6 +97,56 @@ inline in each YAML file. A hand-copied list silently stops covering new files a
 the project grows, and nothing fails loudly to reveal the gap — it only surfaces
 later as an unchecked file shipping a bug. Route the list through `make lint` (or
 equivalent) and have every entry point call that target.
+
+### Composite actions for setup shared with the release workflow
+
+When PR CI (`ci.yml`) and the reusable release build (`build-release.yml`) both
+need the same multi-step setup — install a toolchain, install hash-pinned
+dependencies — hoist that sequence into a local composite action
+(`.github/actions/<name>/action.yml`) and have every call site `uses:` it,
+rather than hand-copying the steps into each workflow file. The same "one
+place, not several" reasoning as the checked-file-list rule above applies:
+duplicated setup steps drift silently, and nothing fails loudly when they do
+— the release workflow just quietly builds from a slightly different
+toolchain than CI verified.
+
+Don't over-apply this: a step that's genuinely release-only and never
+exercised by PR CI (e.g. a packaging tool only the release build needs) is
+fine left inline — deduplicating it buys nothing and adds a layer of
+indirection for a single call site.
+
+This matters more than ordinary DRY-ing because of what a reusable
+build-release workflow can already be triggered by: the optional
+label-triggered PR-test-build pattern (see *Releases → PR test builds*)
+produces an *installable artifact* from a PR whose own required checks may
+not have finished yet. If `build-release.yml`'s `build` job skips
+verification and goes straight to building, that artifact can ship from code
+that would fail CI. Route lint/test through the same shared composite and
+call it from `build-release.yml`'s `build` job before the build step, not
+only from `ci.yml` — see the commented template in `build-release.yml`.
+
+### Catch schema drift, not just apply-ability
+
+If your stack has an ORM plus a migration tool (Alembic, Django migrations,
+EF Core, ActiveRecord, golang-migrate + sqlc, …), a migration applying
+cleanly proves nothing about whether it still matches the current model
+definitions — someone can edit a model and forget to generate/commit the
+migration, and nothing fails until the drift surfaces as a runtime bug. Add a
+CI step that diffs the two and fails on disagreement (e.g. `alembic upgrade
+head && alembic check`) — the same "catch drift cheaply in CI" category as
+the checked-file-list rule above, just applied to schema instead of files.
+
+### Exercise non-default config in templated-render jobs
+
+A CI job that renders templated deployment config (Helm, Kustomize,
+Terraform) and only renders it with defaults never executes the `if`/optional
+blocks — a feature flag, an optional subcharts, a conditional resource. A
+broken conditional template ships undetected until someone flips the flag in
+production. Render at least twice: once with defaults, once with a
+representative set of non-default/optional flags enabled (e.g. `helm
+template … && helm template … --set feature.enabled=true`). Same "fail safe
+toward running more, not less" philosophy as the diff-classifier's
+unrecognized-path fallback.
 
 ### Caching that actually helps
 
@@ -156,7 +213,7 @@ chronologically. Include time-of-day (`%Y%m%d%H%M%S`) whenever the identifier ca
 recur within a day — this is why `autotag.yml`'s dev tag is
 `vX.Y.Z-dev.<UTC-timestamp>.<short-sha>` rather than `<UTC-date>.<short-sha>`.
 
-### Two GitHub platform gotchas (documented because they cost real time)
+### GitHub platform gotchas (documented because they cost real time)
 
 1. **A tag pushed with the default `GITHUB_TOKEN` does not trigger
    `on: push: tags`.** GitHub suppresses this to prevent workflow loops. So
@@ -166,6 +223,15 @@ recur within a day — this is why `autotag.yml`'s dev tag is
 2. **Immutable releases only accept assets while a draft.** Create the release as a
    *draft* with the assets attached, then flip `draft=false` in a second step.
    Attaching after publish fails.
+3. **A `container:` job's default step shell is `sh -e {0}`, not bash** — even on
+   a stock Ubuntu image with `/bin/bash` present. Bash-only syntax in a `run:`
+   block (`set -o pipefail`, ANSI-C `$'\n'` quoting, etc.) then fails with a
+   cryptic `Illegal option -o pipefail`-style error that doesn't point at the
+   real cause. Any job that runs inside a `container:` image (packaging that
+   needs a pinned toolchain/base image, for one) and needs bash semantics must
+   set `defaults: run: shell: bash` at the job level explicitly — it is not
+   inherited from the runner OS. See the commented example in
+   `build-release.yml`.
 
 ### PR test builds (optional pattern, not templated here)
 
