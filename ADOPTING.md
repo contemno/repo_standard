@@ -36,6 +36,18 @@ name is what you protect — never the individual fanned-out jobs.
 - [ ] Route any checked-file list (lint targets, build targets) through one
       Makefile/script target that every workflow entry point calls identically —
       don't hand-duplicate the list inline in more than one YAML file.
+- [ ] If `ci.yml` and `build-release.yml` share setup steps (toolchain
+      install, hash-pinned dependency install), extract them into a composite
+      action under `.github/actions/` and have both `uses:` it — don't
+      hand-duplicate. Leave a genuinely release-only, PR-CI-unexercised step
+      inline; it's not worth deduplicating for a single call site.
+- [ ] If your stack has an ORM + migrations, add a CI step that fails when
+      models and migrations disagree — e.g. `alembic upgrade head && alembic
+      check`, or your ecosystem's equivalent.
+- [ ] If a CI job renders templated deployment config (Helm/Kustomize/
+      Terraform), render it at least twice: once with defaults, once with a
+      representative set of non-default/optional flags enabled — a
+      default-only render never exercises `if`/optional blocks.
 - [ ] `security.yml`: fill in the ecosystem-specific advisory scan (`cargo audit`,
       `pip-audit`, `npm audit`, …) against your committed lockfile. No lockfile
       to audit (e.g. a Debian package resolving deps via `apt`/`debian/control`
@@ -51,6 +63,10 @@ name is what you protect — never the individual fanned-out jobs.
 
 - [ ] `build-release.yml`: replace the build/package steps with your artifact's
       build. Keep the draft-then-publish release shape.
+- [ ] `build-release.yml`: uncomment and fill in the `lint`/`test` jobs ahead
+      of `build`, reusing the same composite action(s) `ci.yml` calls — see
+      `STANDARD.md` → "One build definition" / "Composite actions for setup
+      shared with the release workflow".
 - [ ] `autotag.yml` / `release.yml`: set the branches and the artifact glob.
 - [ ] Set `VERSION` to your starting floor (e.g. `0.1.0`).
 - [ ] Confirm `paths-ignore` carve-outs match your repo (don't ignore the files

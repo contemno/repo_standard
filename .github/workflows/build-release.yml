@@ -26,8 +26,42 @@ permissions:
   contents: read
 
 jobs:
+  # OPTIONAL but recommended: re-run lint/test on `inputs.ref` before packaging
+  # it, via the SAME composite action(s) ci.yml uses for setup — see
+  # STANDARD.md -> "Composite actions for setup shared with the release
+  # workflow". Without this, a call path that never went through PR CI (a
+  # label-triggered PR-test-build, or a manually re-tagged old ref) can
+  # produce an installable artifact from code that would fail CI.
+  # lint:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+  #       with:
+  #         ref: ${{ inputs.ref }}
+  #     - uses: ./.github/actions/your-setup   # same composite ci.yml calls
+  #     - run: echo "TODO - lint, matching ci.yml"
+  # test:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+  #       with:
+  #         ref: ${{ inputs.ref }}
+  #     - uses: ./.github/actions/your-setup
+  #     - run: echo "TODO - test, matching ci.yml"
+
   build:
+    # needs: [lint, test]   # uncomment once the jobs above are filled in
     runs-on: ubuntu-latest
+    # If your build needs a specific base image (a pinned toolchain, a
+    # Debian/RPM builder image, …), add `container:` here — but note it
+    # changes the default step shell to `sh`, not bash, even on an
+    # Ubuntu-based image. Any `run:` step below using bash syntax
+    # (`set -o pipefail`, etc.) needs this or it fails cryptically.
+    # See STANDARD.md -> "GitHub platform gotchas".
+    # container: your-build-image:pinned-tag
+    # defaults:
+    #   run:
+    #     shell: bash
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
